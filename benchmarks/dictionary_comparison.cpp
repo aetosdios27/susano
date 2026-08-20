@@ -3,6 +3,7 @@
 #include "susano/physical_type.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <bit>
 #include <charconv>
@@ -497,26 +498,59 @@ void print_header() {
                  "ns_per_value,cycles_per_value,predicate_selectivity,checksum\n";
 }
 
+void run_config(const Config& config) {
+    if (config.type == "int32") {
+        run_case<std::int32_t>(config);
+    } else if (config.type == "int64") {
+        run_case<std::int64_t>(config);
+    } else {
+        run_case<double>(config);
+    }
+}
+
+void run_cardinality_sweep() {
+    constexpr std::array<std::size_t, 6> cardinalities{
+        10, 100, 1'000, 10'000, 100'000, 1'000'000};
+    constexpr std::array<Distribution, 2> distributions{
+        Distribution::Uniform, Distribution::Skewed};
+    constexpr std::array<std::string_view, 3> types{"int32", "int64", "float64"};
+
+    for (const auto distribution : distributions) {
+        for (const auto type : types) {
+            for (const auto cardinality : cardinalities) {
+                Config config;
+                config.rows = 1'000'000;
+                config.cardinality = cardinality;
+                config.null_permille = 0;
+                config.distribution = distribution;
+                config.sortedness = Sortedness::Random;
+                config.type = type;
+                run_config(config);
+            }
+        }
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    Config config;
-    if (!parse_arguments(argc, argv, config)) {
-        std::cerr << "usage: susano_bench_dictionary [--rows N] [--cardinality C] "
-                     "[--null-permille 0..1000] [--distribution uniform|skewed] "
-                     "[--sortedness random|sorted] [--type int32|int64|float64] [--seed N]\n";
-        return 2;
-    }
-
     print_header();
     try {
-        if (config.type == "int32") {
-            run_case<std::int32_t>(config);
-        } else if (config.type == "int64") {
-            run_case<std::int64_t>(config);
-        } else {
-            run_case<double>(config);
+        if (argc == 3 && std::string_view{argv[1]} == "--sweep" &&
+            std::string_view{argv[2]} == "cardinality") {
+            run_cardinality_sweep();
+            return 0;
         }
+
+        Config config;
+        if (!parse_arguments(argc, argv, config)) {
+            std::cerr << "usage: susano_bench_dictionary [--sweep cardinality] "
+                         "[--rows N] [--cardinality C] [--null-permille 0..1000] "
+                         "[--distribution uniform|skewed] [--sortedness random|sorted] "
+                         "[--type int32|int64|float64] [--seed N]\n";
+            return 2;
+        }
+        run_config(config);
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
