@@ -3,6 +3,7 @@
 #include "susano/physical_type.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <bit>
 #include <charconv>
@@ -12,6 +13,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <span>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -317,7 +319,7 @@ void emit(const Config& config,
 }
 
 template <susano::FixedColumnValue T>
-void run_case(const Config& config) {
+void run_ratios(const Config& config, std::span<const std::uint32_t> ratios) {
     const auto raw_main = generate_main<T>(config);
     const auto main_started = std::chrono::steady_clock::now();
     susano::MainColumn<T> main{raw_main};
@@ -342,51 +344,57 @@ void run_case(const Config& config) {
         return sequential_checksum(column);
     });
 
-    const auto target_delta = config.main_rows * config.delta_permille / 1'000;
-    const auto append = append_delta(column, target_delta, config);
-    const auto memory = layout(column);
-    const auto logical_values = column.size() * static_cast<std::size_t>(config.iterations);
-    const auto points = point_rows(column.size(), config.seed ^ 17ULL);
+    for (const auto ratio : ratios) {
+        const auto target_delta = config.main_rows * ratio / 1'000;
+        const auto append = append_delta(column, target_delta, config);
+        const auto memory = layout(column);
+        const auto logical_values = column.size() * static_cast<std::size_t>(config.iterations);
+        const auto points = point_rows(column.size(), config.seed ^ 17ULL);
 
-    const auto run_and_emit = [&](Operation operation) {
-        if (operation == Operation::Point) {
-            const auto result = config.delta_permille == 0 ? baseline_point : measure(config.iterations, [&] {
-                return point_checksum(column, points);
-            });
-            emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append, "point_mixed",
-                 points.size() * static_cast<std::size_t>(config.iterations), result,
-                 static_cast<double>(result.elapsed_ns) / static_cast<double>(baseline_point.elapsed_ns));
-        } else if (operation == Operation::Equality) {
-            const auto result = config.delta_permille == 0 ? baseline_equal : measure(config.iterations, [&] {
-                return equality_count(column, equality_target);
-            });
-            emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append, "equality",
-                 logical_values, result,
-                 static_cast<double>(result.elapsed_ns) / static_cast<double>(baseline_equal.elapsed_ns));
-        } else if (operation == Operation::Range) {
-            const auto result = config.delta_permille == 0 ? baseline_range : measure(config.iterations, [&] {
-                return range_count(column, range_target);
-            });
-            emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append, "range_less",
-                 logical_values, result,
-                 static_cast<double>(result.elapsed_ns) / static_cast<double>(baseline_range.elapsed_ns));
-        } else if (operation == Operation::Scan) {
-            const auto result = config.delta_permille == 0 ? baseline_scan : measure(config.iterations, [&] {
-                return sequential_checksum(column);
-            });
-            emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append, "sequential_scan",
-                 logical_values, result,
-                 static_cast<double>(result.elapsed_ns) / static_cast<double>(baseline_scan.elapsed_ns));
+        const auto run_and_emit = [&](Operation operation) {
+            if (operation == Operation::Point) {
+                const auto result = ratio == 0 ? baseline_point : measure(config.iterations, [&] {
+                    return point_checksum(column, points);
+                });
+                emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
+                     "point_mixed", points.size() * static_cast<std::size_t>(config.iterations),
+                     result, static_cast<double>(result.elapsed_ns) /
+                                 static_cast<double>(baseline_point.elapsed_ns));
+            } else if (operation == Operation::Equality) {
+                const auto result = ratio == 0 ? baseline_equal : measure(config.iterations, [&] {
+                    return equality_count(column, equality_target);
+                });
+                emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
+                     "equality", logical_values, result,
+                     static_cast<double>(result.elapsed_ns) /
+                         static_cast<double>(baseline_equal.elapsed_ns));
+            } else if (operation == Operation::Range) {
+                const auto result = ratio == 0 ? baseline_range : measure(config.iterations, [&] {
+                    return range_count(column, range_target);
+                });
+                emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
+                     "range_less", logical_values, result,
+                     static_cast<double>(result.elapsed_ns) /
+                         static_cast<double>(baseline_range.elapsed_ns));
+            } else if (operation == Operation::Scan) {
+                const auto result = ratio == 0 ? baseline_scan : measure(config.iterations, [&] {
+                    return sequential_checksum(column);
+                });
+                emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
+                     "sequential_scan", logical_values, result,
+                     static_cast<double>(result.elapsed_ns) /
+                         static_cast<double>(baseline_scan.elapsed_ns));
+            }
+        };
+
+        if (config.operation == Operation::All) {
+            run_and_emit(Operation::Point);
+            run_and_emit(Operation::Equality);
+            run_and_emit(Operation::Range);
+            run_and_emit(Operation::Scan);
+        } else {
+            run_and_emit(config.operation);
         }
-    };
-
-    if (config.operation == Operation::All) {
-        run_and_emit(Operation::Point);
-        run_and_emit(Operation::Equality);
-        run_and_emit(Operation::Range);
-        run_and_emit(Operation::Scan);
-    } else {
-        run_and_emit(config.operation);
     }
 }
 
@@ -440,25 +448,53 @@ bool parse_arguments(int argc, char** argv, Config& config) {
            config.cardinality <= config.main_rows && config.iterations > 0;
 }
 
+void run_config(const Config& config, std::span<const std::uint32_t> ratios) {
+    if (config.type == "int32") {
+        run_ratios<std::int32_t>(config, ratios);
+    } else if (config.type == "int64") {
+        run_ratios<std::int64_t>(config, ratios);
+    } else {
+        run_ratios<double>(config, ratios);
+    }
+}
+
+void run_full_sweep() {
+    constexpr std::array<std::uint32_t, 8> ratios{0, 1, 10, 50, 100, 250, 500, 1'000};
+    constexpr std::array<Distribution, 2> distributions{
+        Distribution::Uniform, Distribution::Skewed};
+    constexpr std::array<std::string_view, 3> types{"int32", "int64", "float64"};
+    for (const auto distribution : distributions) {
+        for (const auto type : types) {
+            Config config;
+            config.distribution = distribution;
+            config.type = type;
+            config.delta_permille = 0;
+            run_config(config, ratios);
+        }
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
+    emit_header();
+    if (argc == 3 && std::string_view{argv[1]} == "--sweep" &&
+        std::string_view{argv[2]} == "all") {
+        run_full_sweep();
+        return 0;
+    }
+
     Config config;
     if (!parse_arguments(argc, argv, config)) {
-        std::cerr << "usage: susano_bench_main_delta [--main-rows N] [--cardinality C] "
-                     "[--delta-permille 0..1000] [--null-permille 0..1000] "
-                     "[--distribution uniform|skewed] [--type int32|int64|float64] "
+        std::cerr << "usage: susano_bench_main_delta [--sweep all] [--main-rows N] "
+                     "[--cardinality C] [--delta-permille 0..1000] "
+                     "[--null-permille 0..1000] [--distribution uniform|skewed] "
+                     "[--type int32|int64|float64] "
                      "[--operation all|point|equality|range|scan] [--iterations N] [--seed N]\n";
         return 2;
     }
 
-    emit_header();
-    if (config.type == "int32") {
-        run_case<std::int32_t>(config);
-    } else if (config.type == "int64") {
-        run_case<std::int64_t>(config);
-    } else {
-        run_case<double>(config);
-    }
+    const std::array<std::uint32_t, 1> ratio{config.delta_permille};
+    run_config(config, ratio);
     return 0;
 }
