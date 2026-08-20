@@ -18,6 +18,20 @@ add_executable(susano
 
 target_compile_features(susano PRIVATE cxx_std_23)
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(susano PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow
+        -Werror
+    )
+elseif(MSVC)
+    target_compile_options(susano PRIVATE /W4 /WX)
+endif()
+
 if(BUILD_TESTING)
     add_test(NAME susano_smoke COMMAND susano)
     set_tests_properties(susano_smoke PROPERTIES
