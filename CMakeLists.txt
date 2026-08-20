@@ -11,9 +11,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SUSANO_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(SUSANO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(SUSANO_BUILD_BENCHMARKS "Build Susano microbenchmarks" OFF)
 
 include(CTest)
+if(SUSANO_ENABLE_SANITIZERS AND SUSANO_ENABLE_TSAN)
+    message(FATAL_ERROR "AddressSanitizer/UndefinedBehaviorSanitizer cannot be combined with ThreadSanitizer")
+endif()
 
 function(susano_configure_target target)
     target_compile_features(${target} PRIVATE cxx_std_23)
@@ -43,6 +47,18 @@ function(susano_configure_target target)
             -fno-omit-frame-pointer
         )
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+    endif()
+
+    if(SUSANO_ENABLE_TSAN)
+        if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            message(FATAL_ERROR "SUSANO_ENABLE_TSAN requires GCC or Clang")
+        endif()
+
+        target_compile_options(${target} PRIVATE
+            -fsanitize=thread
+            -fno-omit-frame-pointer
+        )
+        target_link_options(${target} PRIVATE -fsanitize=thread)
     endif()
 endfunction()
 
