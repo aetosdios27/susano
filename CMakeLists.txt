@@ -10,6 +10,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(SUSANO_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
 include(CTest)
 
 add_executable(susano
@@ -30,6 +32,18 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     )
 elseif(MSVC)
     target_compile_options(susano PRIVATE /W4 /WX)
+endif()
+
+if(SUSANO_ENABLE_SANITIZERS)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(FATAL_ERROR "SUSANO_ENABLE_SANITIZERS requires GCC or Clang")
+    endif()
+
+    target_compile_options(susano PRIVATE
+        -fsanitize=address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(susano PRIVATE -fsanitize=address,undefined)
 endif()
 
 if(BUILD_TESTING)
