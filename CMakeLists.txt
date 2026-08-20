@@ -11,3 +11,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
+
+add_executable(susano
+    src/main.cpp
+)
+
+target_compile_features(susano PRIVATE cxx_std_23)
