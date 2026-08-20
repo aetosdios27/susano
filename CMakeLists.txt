@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SUSANO_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(SUSANO_BUILD_BENCHMARKS "Build Susano microbenchmarks" OFF)
 
 include(CTest)
 
@@ -53,6 +54,11 @@ endfunction()
 
 add_executable(susano src/main.cpp)
 susano_configure_target(susano)
+
+if(SUSANO_BUILD_BENCHMARKS)
+    add_executable(susano_bench_fixed_column benchmarks/fixed_column_scan.cpp)
+    susano_configure_target(susano_bench_fixed_column)
+endif()
 
 if(BUILD_TESTING)
     add_test(NAME susano_smoke COMMAND susano)
