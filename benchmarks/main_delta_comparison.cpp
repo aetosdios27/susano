@@ -330,17 +330,19 @@ void run_ratios(const Config& config, std::span<const std::uint32_t> ratios) {
 
     const auto equality_target = value_from_id<T>(config.cardinality / 2);
     const auto range_target = value_from_id<T>(config.cardinality / 2) + static_cast<T>(1);
+    const auto baseline_iterations =
+        config.operation == Operation::All ? config.iterations : std::uint64_t{1};
     const auto baseline_points = point_rows(column.size(), config.seed ^ 17ULL);
-    const auto baseline_point = measure(config.iterations, [&] {
+    const auto baseline_point = measure(baseline_iterations, [&] {
         return point_checksum(column, baseline_points);
     });
-    const auto baseline_equal = measure(config.iterations, [&] {
+    const auto baseline_equal = measure(baseline_iterations, [&] {
         return equality_count(column, equality_target);
     });
-    const auto baseline_range = measure(config.iterations, [&] {
+    const auto baseline_range = measure(baseline_iterations, [&] {
         return range_count(column, range_target);
     });
-    const auto baseline_scan = measure(config.iterations, [&] {
+    const auto baseline_scan = measure(baseline_iterations, [&] {
         return sequential_checksum(column);
     });
 
@@ -350,40 +352,53 @@ void run_ratios(const Config& config, std::span<const std::uint32_t> ratios) {
         const auto memory = layout(column);
         const auto logical_values = column.size() * static_cast<std::size_t>(config.iterations);
         const auto points = point_rows(column.size(), config.seed ^ 17ULL);
+        const auto relative_latency = [&](Measurement result, Measurement baseline) {
+            const auto result_per_iteration =
+                static_cast<double>(result.elapsed_ns) / static_cast<double>(config.iterations);
+            const auto baseline_per_iteration =
+                static_cast<double>(baseline.elapsed_ns) / static_cast<double>(baseline_iterations);
+            return result_per_iteration / baseline_per_iteration;
+        };
+
 
         const auto run_and_emit = [&](Operation operation) {
             if (operation == Operation::Point) {
-                const auto result = ratio == 0 ? baseline_point : measure(config.iterations, [&] {
-                    return point_checksum(column, points);
-                });
+                const auto result =
+                    ratio == 0 && baseline_iterations == config.iterations
+                        ? baseline_point
+                        : measure(config.iterations, [&] {
+                              return point_checksum(column, points);
+                          });
                 emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
                      "point_mixed", points.size() * static_cast<std::size_t>(config.iterations),
-                     result, static_cast<double>(result.elapsed_ns) /
-                                 static_cast<double>(baseline_point.elapsed_ns));
+                     result, relative_latency(result, baseline_point));
             } else if (operation == Operation::Equality) {
-                const auto result = ratio == 0 ? baseline_equal : measure(config.iterations, [&] {
-                    return equality_count(column, equality_target);
-                });
+                const auto result =
+                    ratio == 0 && baseline_iterations == config.iterations
+                        ? baseline_equal
+                        : measure(config.iterations, [&] {
+                              return equality_count(column, equality_target);
+                          });
                 emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
-                     "equality", logical_values, result,
-                     static_cast<double>(result.elapsed_ns) /
-                         static_cast<double>(baseline_equal.elapsed_ns));
+                     "equality", logical_values, result, relative_latency(result, baseline_equal));
             } else if (operation == Operation::Range) {
-                const auto result = ratio == 0 ? baseline_range : measure(config.iterations, [&] {
-                    return range_count(column, range_target);
-                });
+                const auto result =
+                    ratio == 0 && baseline_iterations == config.iterations
+                        ? baseline_range
+                        : measure(config.iterations, [&] {
+                              return range_count(column, range_target);
+                          });
                 emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
-                     "range_less", logical_values, result,
-                     static_cast<double>(result.elapsed_ns) /
-                         static_cast<double>(baseline_range.elapsed_ns));
+                     "range_less", logical_values, result, relative_latency(result, baseline_range));
             } else if (operation == Operation::Scan) {
-                const auto result = ratio == 0 ? baseline_scan : measure(config.iterations, [&] {
-                    return sequential_checksum(column);
-                });
+                const auto result =
+                    ratio == 0 && baseline_iterations == config.iterations
+                        ? baseline_scan
+                        : measure(config.iterations, [&] {
+                              return sequential_checksum(column);
+                          });
                 emit(config, type_name<T>(), column.delta_size(), main_build_ns, memory, append,
-                     "sequential_scan", logical_values, result,
-                     static_cast<double>(result.elapsed_ns) /
-                         static_cast<double>(baseline_scan.elapsed_ns));
+                     "sequential_scan", logical_values, result, relative_latency(result, baseline_scan));
             }
         };
 
