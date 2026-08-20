@@ -67,6 +67,24 @@ public:
         return static_cast<ValueId>(position - values_.begin());
     }
 
+    [[nodiscard]] ValueId lower_bound_id(T target) const {
+        if (!is_supported(target)) {
+            throw std::invalid_argument{"dictionary range target must be finite"};
+        }
+        const auto normalized = canonicalize(target);
+        const auto position = std::lower_bound(values_.begin(), values_.end(), normalized);
+        return static_cast<ValueId>(position - values_.begin());
+    }
+
+    [[nodiscard]] ValueId upper_bound_id(T target) const {
+        if (!is_supported(target)) {
+            throw std::invalid_argument{"dictionary range target must be finite"};
+        }
+        const auto normalized = canonicalize(target);
+        const auto position = std::upper_bound(values_.begin(), values_.end(), normalized);
+        return static_cast<ValueId>(position - values_.begin());
+    }
+
     [[nodiscard]] std::span<const T> values() const noexcept {
         return values_;
     }
