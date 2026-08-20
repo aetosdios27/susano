@@ -17,3 +17,10 @@ add_executable(susano
 )
 
 target_compile_features(susano PRIVATE cxx_std_23)
+
+if(BUILD_TESTING)
+    add_test(NAME susano_smoke COMMAND susano)
+    set_tests_properties(susano_smoke PROPERTIES
+        PASS_REGULAR_EXPRESSION "Susano is ready\\."
+    )
+endif()
