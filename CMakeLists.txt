@@ -62,4 +62,5 @@ if(BUILD_TESTING)
 
     susano_add_test(physical_type_test tests/physical_type_test.cpp)
     susano_add_test(row_id_test tests/row_id_test.cpp)
+    susano_add_test(validity_bitmap_test tests/validity_bitmap_test.cpp)
 endif()
