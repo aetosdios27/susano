@@ -31,7 +31,7 @@ struct MainDeltaAddress {
 // Precondition: row.value() < main_size + delta_size.
 [[nodiscard]] inline MainDeltaAddress resolve_main_delta_row(RowId row,
                                                              std::size_t main_size,
-                                                             std::size_t delta_size) noexcept {
+                                                             [[maybe_unused]] std::size_t delta_size) noexcept {
     if (row.value() < main_size) {
         return MainDeltaAddress{MainDeltaDomain::Main, static_cast<std::size_t>(row.value())};
     }
