@@ -14,41 +14,51 @@ option(SUSANO_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSa
 
 include(CTest)
 
-add_executable(susano
-    src/main.cpp
-)
+function(susano_configure_target target)
+    target_compile_features(${target} PRIVATE cxx_std_23)
+    target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src")
 
-target_compile_features(susano PRIVATE cxx_std_23)
-
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(susano PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wconversion
-        -Wsign-conversion
-        -Wshadow
-        -Werror
-    )
-elseif(MSVC)
-    target_compile_options(susano PRIVATE /W4 /WX)
-endif()
-
-if(SUSANO_ENABLE_SANITIZERS)
-    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        message(FATAL_ERROR "SUSANO_ENABLE_SANITIZERS requires GCC or Clang")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -Wconversion
+            -Wsign-conversion
+            -Wshadow
+            -Werror
+        )
+    elseif(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX)
     endif()
 
-    target_compile_options(susano PRIVATE
-        -fsanitize=address,undefined
-        -fno-omit-frame-pointer
-    )
-    target_link_options(susano PRIVATE -fsanitize=address,undefined)
-endif()
+    if(SUSANO_ENABLE_SANITIZERS)
+        if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            message(FATAL_ERROR "SUSANO_ENABLE_SANITIZERS requires GCC or Clang")
+        endif()
+
+        target_compile_options(${target} PRIVATE
+            -fsanitize=address,undefined
+            -fno-omit-frame-pointer
+        )
+        target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+    endif()
+endfunction()
+
+function(susano_add_test test_name source)
+    add_executable(${test_name} ${source})
+    susano_configure_target(${test_name})
+    add_test(NAME ${test_name} COMMAND ${test_name})
+endfunction()
+
+add_executable(susano src/main.cpp)
+susano_configure_target(susano)
 
 if(BUILD_TESTING)
     add_test(NAME susano_smoke COMMAND susano)
     set_tests_properties(susano_smoke PROPERTIES
         PASS_REGULAR_EXPRESSION "Susano is ready\\."
     )
+
+    susano_add_test(physical_type_test tests/physical_type_test.cpp)
 endif()
