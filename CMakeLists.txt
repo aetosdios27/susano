@@ -58,6 +58,8 @@ susano_configure_target(susano)
 if(SUSANO_BUILD_BENCHMARKS)
     add_executable(susano_bench_fixed_column benchmarks/fixed_column_scan.cpp)
     susano_configure_target(susano_bench_fixed_column)
+    add_executable(susano_bench_dictionary benchmarks/dictionary_comparison.cpp)
+    susano_configure_target(susano_bench_dictionary)
 endif()
 
 if(BUILD_TESTING)
