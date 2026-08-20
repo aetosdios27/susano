@@ -62,6 +62,8 @@ if(SUSANO_BUILD_BENCHMARKS)
     susano_configure_target(susano_bench_dictionary)
     add_executable(susano_bench_packed_codes benchmarks/packed_code_comparison.cpp)
     susano_configure_target(susano_bench_packed_codes)
+    add_executable(susano_bench_main_delta benchmarks/main_delta_comparison.cpp)
+    susano_configure_target(susano_bench_main_delta)
 endif()
 
 if(BUILD_TESTING)
